@@ -715,11 +715,13 @@ static char *get_ssh_key_fingerprint(const char *signing_key)
 	struct strbuf **fingerprint;
 	char *fingerprint_ret;
 
+	warning(_("signing_key: %s"), signing_key);
+
 	/*
 	 * With SSH Signing this can contain a filename or a public key
 	 * For textual representation we usually want a fingerprint
 	 */
-	if (starts_with(signing_key, "ssh-")) {
+	if (valid_ssh_signing_key(signing_key)) {
 		strvec_pushl(&ssh_keygen.args, "ssh-keygen", "-lf", "-", NULL);
 		ret = pipe_command(&ssh_keygen, signing_key,
 				   strlen(signing_key), &fingerprint_stdout, 0,
@@ -774,7 +776,7 @@ static const char *get_default_ssh_signing_key(void)
 
 	if (!ret) {
 		keys = strbuf_split_max(&key_stdout, '\n', 2);
-		if (keys[0] && starts_with(keys[0]->buf, "ssh-")) {
+		if (keys[0] && valid_ssh_signing_key(keys[0]->buf)) {
 			default_key = strbuf_detach(keys[0], NULL);
 		} else {
 			warning(_("gpg.ssh.defaultKeyCommand succeeded but returned no keys: %s %s"),
@@ -792,6 +794,11 @@ static const char *get_default_ssh_signing_key(void)
 	strbuf_release(&key_stdout);
 
 	return default_key;
+}
+
+int valid_ssh_signing_key(const char* key)
+{
+	return starts_with(key, "ssh-") || starts_with(key, "ecdsa-");
 }
 
 static const char *get_ssh_key_id(void) {
@@ -822,6 +829,7 @@ const char *get_signing_key(void)
 
 int sign_buffer(struct strbuf *buffer, struct strbuf *signature, const char *signing_key)
 {
+  warning("sign buffer");
 	return use_format->sign_buffer(buffer, signature, signing_key);
 }
 
@@ -894,7 +902,7 @@ static int sign_buffer_ssh(struct strbuf *buffer, struct strbuf *signature,
 		return error(
 			_("user.signingkey needs to be set for ssh signing"));
 
-	if (starts_with(signing_key, "ssh-")) {
+	if (valid_ssh_signing_key(signing_key)) {
 		/* A literal ssh key */
 		key_file = mks_tempfile_t(".git_signing_key_tmpXXXXXX");
 		if (!key_file)
